@@ -9,7 +9,9 @@ pyproject.toml
 .idea/vcs.xml
 .idea/inspectionProfiles/Project_Default.xml
 .idea/inspectionProfiles/profiles_settings.xml
-thread_manager/__init__.py
+toomanythreads/__init__.py
+toomanythreads/debug.py
+toomanythreads/threaded_server.py
 toomanythreads.egg-info/PKG-INFO
 toomanythreads.egg-info/SOURCES.txt
 toomanythreads.egg-info/dependency_links.txt

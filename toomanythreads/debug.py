@@ -1,6 +1,6 @@
 import time
 
-from thread_manager import ThreadedServer
+from toomanythreads import ThreadedServer
 
 app = ThreadedServer()
 

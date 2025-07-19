@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from loguru import logger as log
 from toomanyports import PortManager
 
-from thread_manager import ManagedThread
+from toomanythreads import ManagedThread
 
 
 class ThreadedServer(FastAPI):
@@ -21,7 +21,9 @@ class ThreadedServer(FastAPI):
         self.port = PortManager.random_port() if port is None else port
         self.verbose = verbose
         super().__init__(debug=self.verbose)
-        if self.verbose: log.success(f"[{self}]: Initialized successfully!\n  - host={self.host}\n  - port={self.port}")
+        if self.verbose:
+            try: log.success(f"[{self}]: Initialized successfully!\n  - host={self.host}\n  - port={self.port}")
+            except Exception: log.success(f"Initialized new ThreadedServer successfully!\n  - host={self.host}\n  - port={self.port}")
 
     @cached_property
     def uvicorn_cfg(self) -> uvicorn.Config:
