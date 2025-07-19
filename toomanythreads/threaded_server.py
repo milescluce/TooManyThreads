@@ -26,6 +26,10 @@ class ThreadedServer(FastAPI):
             except Exception: log.success(f"Initialized new ThreadedServer successfully!\n  - host={self.host}\n  - port={self.port}")
 
     @cached_property
+    def url(self):
+        return f"http://{self.host}:{self.port}"
+
+    @cached_property
     def uvicorn_cfg(self) -> uvicorn.Config:
         return uvicorn.Config(
             app=self,

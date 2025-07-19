@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toomanythreads
-Version: 0.2.1
+Version: 0.2.2
 Summary: A singleton-based thread management system with auto-registration and verbose logging
 Author: Miles Copeland Luce
 License: MIT
