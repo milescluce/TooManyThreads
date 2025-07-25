@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toomanythreads"
-version = "0.2.3"
+version = "0.2.4"
 description = "A singleton-based thread management system with auto-registration and verbose logging"
 readme = "README.md"
 license = {text = "MIT"}

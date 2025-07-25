@@ -19,6 +19,7 @@ class ThreadedServer(FastAPI):
     ) -> None:
         self.host = "localhost" if host is None else host
         self.port = PortManager.random_port() if port is None else port
+        PortManager.kill(self.port, force=True)
         self.verbose = verbose
         super().__init__(debug=self.verbose)
         if self.verbose:
