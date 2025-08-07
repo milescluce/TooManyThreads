@@ -15,7 +15,7 @@ class _ThreadManager:
         self.verbose = verbose
         self.threads: Dict[str, Type | threading.Thread] = {}
 
-    def register(self, thread: Type) -> None:
+    def register(self, thread: Type):
         """Register a new managed thread."""
         self.threads[thread.obj_full_name] = thread
         if self.verbose:
