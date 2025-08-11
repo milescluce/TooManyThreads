@@ -1,3 +1,5 @@
+import asyncio
+import re
 import threading
 import time
 import traceback
@@ -10,6 +12,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI, APIRouter
 from loguru import logger as log
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 from toomanyports import PortManager
@@ -124,7 +127,6 @@ class ThreadedServer(FastAPI):
             if name == "APIRouter": name = f"{name}.{str(uuid.uuid1())}"
         super().include_router(router, prefix=prefix, **kwargs)
 
-
         mounter = self
         mounted = router
         mounter.app_metadata.is_child_of.append(mounted)
@@ -171,39 +173,59 @@ class ThreadedServer(FastAPI):
 
         return ManagedThread(proc, self)
 
-    async def forward(self, endpoint_path: str, request: Request = None, **params):
+    async def forward(self, path: str, request: Request = None, **params):
         """Forward to an endpoint via memory using dot notation (e.g., 'auth.login')"""
-        # Split "auth.login" into ["auth", "login"]
-        path_parts = endpoint_path.split('.')
+        log.debug(f"{self}: Received forwarding request for '{path}'!")
+        endpoints = self.endpoints
+        index = endpoints.as_dict
+        log.debug(index)
+        if path in index:
+            try:
+                current = index.get(path)
+                if not callable(current): raise AttributeError(f"'{path}' is not a callable endpoint")
+                log.debug(f"{self}: Found method '{current}' at '{path}'!")
+            except Exception as e:
+                return HTTPException(404, e)
 
-        # Navigate the nested structure
-        current = self.endpoints
-        for part in path_parts:
-            if hasattr(current, part):
-                current = getattr(current, part)
-            else:
-                raise AttributeError(f"Endpoint path '{endpoint_path}' not found")
+        async def attempt():
+            log.info(f"{self}: Attempting to call {current} with params:")
+            if request: params['request'] = request
+            for each in params.items():
+                print(f"  - {each}={params.get(each)}")
+            attempts = 0
+            while attempts < 3:
+                log.debug(f"{self}: Trying attempt '{attempts + 1}' for {current}...")
+                try:
+                    try:
+                        if asyncio.iscoroutinefunction(current):
+                            return await current(**params)
+                        else:
+                            return current(**params)
+                    except TypeError as e:
+                        log.error(f"{self}: Attempt failed!\n{e}")
+                        if "got an unexpected keyword argument" in str(e):
+                            pattern = r"'([^']+)'"
+                            bad_kw = re.search(pattern, str(e))
+                            if bad_kw:
+                                bad_param = bad_kw.group(1)
+                                log.warning(f"{self}: Removing bad keyword, '{bad_param}'")
+                                del params[bad_param]
+                            raise
+                except Exception as e:
+                    log.error(f"{self}: Failed attempt '{attempts + 1}'")
+                    attempts = attempts + 1
+                    if attempts == 3: raise Exception(e)
 
-        # Current should now be the actual endpoint function
-        if not callable(current):
-            raise AttributeError(f"'{endpoint_path}' is not a callable endpoint")
-
-        # Add request to params if provided
-        if request:
-            params['request'] = request
-
-        # Handle both async and sync endpoints
-        import asyncio
-        if asyncio.iscoroutinefunction(current):
-            return await current(**params)
-        else:
-            return current(**params)
+        return await attempt()
 
     @property
     def endpoints(self):
         ns = SimpleNamespace()
+        flat_dict = {}
+
         for route in self.routes:
             if hasattr(route, 'endpoint') and hasattr(route.endpoint, '__name__'):
+                flat_dict[route.path] = route.endpoint
                 # Split path into parts: "/auth/login" -> ["auth", "login"]
                 path_parts = [p for p in route.path.split('/') if p and '{' not in p]
 
@@ -220,4 +242,5 @@ class ThreadedServer(FastAPI):
                 else:
                     setattr(current, 'root', route.endpoint)
 
+        setattr(ns, "as_dict", flat_dict)
         return ns
