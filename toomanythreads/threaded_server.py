@@ -116,13 +116,14 @@ class ThreadedServer(FastAPI):
 
     def include_router(self, router: APIRouter, prefix: str = None, **kwargs):
         if self.verbose: log.debug(f"{self}: Attempting to include an APIRouter to {self}!")
-        super().include_router(router, prefix=prefix, **kwargs)
         if prefix:
             name = prefix[1:].replace("/", "_")
         else:
             prefix = ""
             name = f"{router.__class__.__name__}"
             if name == "APIRouter": name = f"{name}.{str(uuid.uuid1())}"
+        super().include_router(router, prefix=prefix, **kwargs)
+
 
         mounter = self
         mounted = router
