@@ -87,7 +87,9 @@ class ThreadedServer(FastAPI):
                 return Response(e, 500)
 
     def __repr__(self):
-        return f"[{self.__class__.__name__}]"
+        name = f"[{self.__class__.__name__}]"
+        if not name == "[ThreadedServer]": return name
+        else: return f"[ThreadedServer.{str(id(self))[6:]}]"
 
     def mount(self, rel_path: str, app: Any, name: str = None):
         if self.verbose: log.debug(f"{self}: Attempting to mount an application to {self}!")
@@ -97,7 +99,7 @@ class ThreadedServer(FastAPI):
 
         mounter = self
         mounted = app
-        mounter.app_metadata.is_child_of.append(mounted)
+        mounter.app_metadata.is_parent_of.append(mounted)
         if not getattr(mounted, "app_metadata", None):
             metadata = AppMetadata(
                 url=mounter.url + rel_path,
@@ -129,7 +131,7 @@ class ThreadedServer(FastAPI):
 
         mounter = self
         mounted = router
-        mounter.app_metadata.is_child_of.append(mounted)
+        mounter.app_metadata.is_parent_of.append(mounted)
         if not getattr(mounted, "app_metadata", None):
             metadata = AppMetadata(
                 url=mounter.url + prefix,
@@ -202,7 +204,6 @@ class ThreadedServer(FastAPI):
                         else:
                             return current(**params)
                     except TypeError as e:
-                        log.error(f"{self}: Attempt failed!\n{e}")
                         if "got an unexpected keyword argument" in str(e):
                             pattern = r"'([^']+)'"
                             bad_kw = re.search(pattern, str(e))
@@ -212,7 +213,7 @@ class ThreadedServer(FastAPI):
                                 del params[bad_param]
                             raise
                 except Exception as e:
-                    log.error(f"{self}: Failed attempt '{attempts + 1}'")
+                    log.error(f"{self}: Failed attempt '{attempts + 1}'\n   - {e}")
                     attempts = attempts + 1
                     if attempts == 3: raise Exception(e)
 
