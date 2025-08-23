@@ -9,6 +9,7 @@ from functools import cached_property
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, APIRouter
 from loguru import logger as log
@@ -25,7 +26,7 @@ DEBUG = True
 @dataclass
 class AppMetadata:
     url: str | None
-    rel_path: str
+    rel_path: str | None
     app: Any
     name: str
     base_app: Any = None
@@ -42,7 +43,29 @@ class AppMetadata:
 
     @property
     def request_to_error_ratio(self):
-        return self.error_count / self.request_count
+        return self.error_count / self.request_count if self.request_count > 0 else 0
+
+    async def request(self, path: str = "/", **kwargs) -> httpx.Response:
+        """Make HTTP request to linked service"""
+        if not self.url:
+            raise ValueError(f"No URL for {self.name}")
+
+        url = f"{self.url.rstrip('/')}/{path.lstrip('/')}"
+
+        async with httpx.AsyncClient() as client:
+            return await client.request(url=url, **kwargs)
+
+    async def get(self, path: str = "/", **kwargs) -> httpx.Response:
+        return await self.request(path, method="GET", **kwargs)
+
+    async def post(self, path: str = "/", **kwargs) -> httpx.Response:
+        return await self.request(path, method="POST", **kwargs)
+
+    async def put(self, path: str = "/", **kwargs) -> httpx.Response:
+        return await self.request(path, method="PUT", **kwargs)
+
+    async def delete(self, path: str = "/", **kwargs) -> httpx.Response:
+        return await self.request(path, method="DELETE", **kwargs)
 
 
 class ThreadedServer(FastAPI):
@@ -91,29 +114,26 @@ class ThreadedServer(FastAPI):
         if not name == "[ThreadedServer]": return name
         else: return f"[ThreadedServer.{str(id(self))[6:]}]"
 
-    def mount(self, rel_path: str, app: Any, name: str = None):
-        if self.verbose: log.debug(f"{self}: Attempting to mount an application to {self}!")
-        if not name: name = rel_path[1:].replace("/", "_")
-
-        super().mount(rel_path, app, name)
-
+    def link(self, app: Any, name: str = None):
+        if self.verbose: log.debug(f"{self}: Attempting to link an application to {self}!")
+        if not name: name = app.__class__.__name__
         mounter = self
         mounted = app
         mounter.app_metadata.is_parent_of.append(mounted)
         if not getattr(mounted, "app_metadata", None):
             metadata = AppMetadata(
-                url=mounter.url + rel_path,
-                rel_path=rel_path,
+                url=mounted.url,
+                rel_path=None,
                 app=mounted,
                 name=name,
                 base_app=mounter,
-                app_type="mount",
+                app_type="link",
                 is_child_of=[mounter]
             )
             setattr(mounted, "app_metadata", metadata)
         else:
-            mounted.app_metadata.url = mounter.app_metadata.url + rel_path
-            mounted.app_metadata.rel_path = rel_path,
+            mounted.app_metadata.url = mounted.url
+            mounted.app_metadata.rel_path = None,
             mounted.app_metadata.base_app = self
             mounted.app_metadata.is_child_of.append(mounter)
 
@@ -175,73 +195,73 @@ class ThreadedServer(FastAPI):
 
         return ManagedThread(proc, self)
 
-    async def forward(self, path: str, request: Request = None, **params):
-        """Forward to an endpoint via memory using dot notation (e.g., 'auth.login')"""
-        log.debug(f"{self}: Received forwarding request for '{path}'!")
-        endpoints = self.endpoints
-        index = endpoints.as_dict
-        log.debug(index)
-        if path in index:
-            try:
-                current = index.get(path)
-                if not callable(current): raise AttributeError(f"'{path}' is not a callable endpoint")
-                log.debug(f"{self}: Found method '{current}' at '{path}'!")
-            except Exception as e:
-                return HTTPException(404, e)
-
-        async def attempt():
-            log.info(f"{self}: Attempting to call {current} with params:")
-            if request: params['request'] = request
-            for each in params.items():
-                print(f"  - {each}={params.get(each)}")
-            attempts = 0
-            while attempts < 3:
-                log.debug(f"{self}: Trying attempt '{attempts + 1}' for {current}...")
-                try:
-                    try:
-                        if asyncio.iscoroutinefunction(current):
-                            return await current(**params)
-                        else:
-                            return current(**params)
-                    except TypeError as e:
-                        if "got an unexpected keyword argument" in str(e):
-                            pattern = r"'([^']+)'"
-                            bad_kw = re.search(pattern, str(e))
-                            if bad_kw:
-                                bad_param = bad_kw.group(1)
-                                log.warning(f"{self}: Removing bad keyword, '{bad_param}'")
-                                del params[bad_param]
-                            raise
-                except Exception as e:
-                    log.error(f"{self}: Failed attempt '{attempts + 1}'\n   - {e}")
-                    attempts = attempts + 1
-                    if attempts == 3: raise Exception(e)
-
-        return await attempt()
-
-    @property
-    def endpoints(self):
-        ns = SimpleNamespace()
-        flat_dict = {}
-
-        for route in self.routes:
-            if hasattr(route, 'endpoint') and hasattr(route.endpoint, '__name__'):
-                flat_dict[route.path] = route.endpoint
-                # Split path into parts: "/auth/login" -> ["auth", "login"]
-                path_parts = [p for p in route.path.split('/') if p and '{' not in p]
-
-                # Build nested structure
-                current = ns
-                for part in path_parts[:-1]:  # All but last part
-                    if not hasattr(current, part):
-                        setattr(current, part, SimpleNamespace())
-                    current = getattr(current, part)
-
-                # Set the endpoint on the final part
-                if path_parts:
-                    setattr(current, path_parts[-1], route.endpoint)
-                else:
-                    setattr(current, 'root', route.endpoint)
-
-        setattr(ns, "as_dict", flat_dict)
-        return ns
+    # async def forward(self, path: str, request: Request = None, **params):
+    #     """Forward to an endpoint via memory using dot notation (e.g., 'auth.login')"""
+    #     log.debug(f"{self}: Received forwarding request for '{path}'!")
+    #     endpoints = self.endpoints
+    #     index = endpoints.as_dict
+    #     log.debug(index)
+    #     if path in index:
+    #         try:
+    #             current = index.get(path)
+    #             if not callable(current): raise AttributeError(f"'{path}' is not a callable endpoint")
+    #             log.debug(f"{self}: Found method '{current}' at '{path}'!")
+    #         except Exception as e:
+    #             return HTTPException(404, e)
+    #
+    #     async def attempt():
+    #         log.info(f"{self}: Attempting to call {current} with params:")
+    #         if request: params['request'] = request
+    #         for each in params.items():
+    #             print(f"  - {each}={params.get(each)}")
+    #         attempts = 0
+    #         while attempts < 3:
+    #             log.debug(f"{self}: Trying attempt '{attempts + 1}' for {current}...")
+    #             try:
+    #                 try:
+    #                     if asyncio.iscoroutinefunction(current):
+    #                         return await current(**params)
+    #                     else:
+    #                         return current(**params)
+    #                 except TypeError as e:
+    #                     if "got an unexpected keyword argument" in str(e):
+    #                         pattern = r"'([^']+)'"
+    #                         bad_kw = re.search(pattern, str(e))
+    #                         if bad_kw:
+    #                             bad_param = bad_kw.group(1)
+    #                             log.warning(f"{self}: Removing bad keyword, '{bad_param}'")
+    #                             del params[bad_param]
+    #                         raise
+    #             except Exception as e:
+    #                 log.error(f"{self}: Failed attempt '{attempts + 1}'\n   - {e}")
+    #                 attempts = attempts + 1
+    #                 if attempts == 3: raise Exception(e)
+    #
+    #     return await attempt()
+    #
+    # @property
+    # def endpoints(self):
+    #     ns = SimpleNamespace()
+    #     flat_dict = {}
+    #
+    #     for route in self.routes:
+    #         if hasattr(route, 'endpoint') and hasattr(route.endpoint, '__name__'):
+    #             flat_dict[route.path] = route.endpoint
+    #             # Split path into parts: "/auth/login" -> ["auth", "login"]
+    #             path_parts = [p for p in route.path.split('/') if p and '{' not in p]
+    #
+    #             # Build nested structure
+    #             current = ns
+    #             for part in path_parts[:-1]:  # All but last part
+    #                 if not hasattr(current, part):
+    #                     setattr(current, part, SimpleNamespace())
+    #                 current = getattr(current, part)
+    #
+    #             # Set the endpoint on the final part
+    #             if path_parts:
+    #                 setattr(current, path_parts[-1], route.endpoint)
+    #             else:
+    #                 setattr(current, 'root', route.endpoint)
+    #
+    #     setattr(ns, "as_dict", flat_dict)
+    #     return ns

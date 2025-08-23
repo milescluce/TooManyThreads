@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toomanythreads"
-version = "0.2.72"
+version = "0.2.74"
 description = "A singleton-based thread management system"
 readme = "README.md"
 license = {text = "MIT"}
@@ -20,4 +20,5 @@ dependencies = [
     "fastapi (>=0.116.1,<0.117.0)",
     "toomanyports (>=0.1.1,<0.2.0)",
     "starlette (>=0.47.2,<0.48.0)",
+    "httpx (>=0.28.1,<0.29.0)",
 ]
