@@ -119,11 +119,18 @@ class ThreadedServer(FastAPI):
         if self.verbose: log.debug(f"{self}: Attempting to link an application to {self}!")
         log.debug(f"Parent URL: {self.url} (host:{self.host}, port:{self.port})")
         log.debug(f"Child URL: {app.url} (host:{app.host}, port:{app.port})")
-
         if not name: name = app.__class__.__name__
         parent = self
         child = app
         child_name = name
+
+        if (parent_sessions := getattr(parent, "sessions", None)) and (child_sessions := getattr(child, "sessions", None)):
+            log.debug(f"{self}: Linking {parent_sessions} to {child}")
+            setattr(child, "sessions", parent_sessions)
+        if (parent_users := getattr(parent, "users", None)) and (child_users := getattr(child, "users", None)):
+            log.debug(f"{self}: Linking {parent_users} to {child}")
+            setattr(child, "users", parent_users)
+
         parent.app_metadata.is_parent_of.append(child)
         if not getattr(child, "app_metadata", None):
             metadata = AppMetadata(
