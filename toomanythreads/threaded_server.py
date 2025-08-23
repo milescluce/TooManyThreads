@@ -117,27 +117,29 @@ class ThreadedServer(FastAPI):
     def link(self, app: Any, name: str = None):
         if self.verbose: log.debug(f"{self}: Attempting to link an application to {self}!")
         if not name: name = app.__class__.__name__
-        mounter = self
-        mounted = app
-        mounter.app_metadata.is_parent_of.append(mounted)
-        if not getattr(mounted, "app_metadata", None):
+        parent = self
+        child = app
+        child_name = name
+        parent.app_metadata.is_parent_of.append(child)
+        if not getattr(child, "app_metadata", None):
             metadata = AppMetadata(
-                url=mounted.url,
+                url=child.url,
                 rel_path=None,
-                app=mounted,
-                name=name,
-                base_app=mounter,
-                app_type="link",
-                is_child_of=[mounter]
+                app=child,
+                name=child_name,
+                base_app=parent,
+                app_type="linked_app",
+                is_child_of=[parent]
             )
-            setattr(mounted, "app_metadata", metadata)
+            setattr(child, "app_metadata", metadata)
         else:
-            mounted.app_metadata.url = mounted.url
-            mounted.app_metadata.rel_path = None,
-            mounted.app_metadata.base_app = self
-            mounted.app_metadata.is_child_of.append(mounter)
+            child.app_metadata.url = child.url
+            child.app_metadata.rel_path = None,
+            child.app_metadata.base_app = parent
+            child.app_metadata.app_type = "linked_app"
+            child.app_metadata.is_child_of.append(parent)
 
-        if self.verbose: log.success(f"{self}: Successfully mounted {name}!\n  - metadata={mounted.app_metadata}")
+        if self.verbose: log.success(f"{self}: Successfully linked {name}!\n  - metadata={child.app_metadata}")
 
     def include_router(self, router: APIRouter, prefix: str = None, **kwargs):
         if self.verbose: log.debug(f"{self}: Attempting to include an APIRouter to {self}!")
