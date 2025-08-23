@@ -69,27 +69,26 @@ class AppMetadata:
 
 
 class ThreadedServer(FastAPI):
-    app_metadata: AppMetadata
-
     def __init__(
             self,
             host: str = "localhost",
-            port: int = PortManager.random_port(),
+            port: int = None,
             verbose: bool = DEBUG,
     ) -> None:
         self.verbose = verbose
         self.host = host
+        if port is None: port = PortManager.random_port()
         self.port = port
+        log.error(self.port)
         PortManager.kill(self.port, force=True)
         super().__init__(debug=self.verbose)
-        if not getattr(self, "app_metadata", None):
-            self.app_metadata = AppMetadata(
-                url=self.url,
-                rel_path="",
-                app=self,
-                name=self.__class__.__name__,
-                base_app=self
-            )
+        self.app_metadata = AppMetadata(
+            url=self.url,
+            rel_path="",
+            app=self,
+            name=self.__class__.__name__,
+            base_app=self
+        )
         if self.verbose: log.success(
             f"{self}: Initialized successfully!\n  - host={self.host}\n  - port={self.port}  - verbose={self.verbose}")
 
@@ -111,11 +110,16 @@ class ThreadedServer(FastAPI):
 
     def __repr__(self):
         name = f"[{self.__class__.__name__}]"
-        if not name == "[ThreadedServer]": return name
-        else: return f"[ThreadedServer.{str(id(self))[6:]}]"
+        if not name == "[ThreadedServer]":
+            return name
+        else:
+            return f"[ThreadedServer.{str(id(self))[6:]}]"
 
-    def link(self, app: Any, name: str = None):
+    def link(self, app: 'ThreadedServer', name: str = None):
         if self.verbose: log.debug(f"{self}: Attempting to link an application to {self}!")
+        log.debug(f"Parent URL: {self.url} (host:{self.host}, port:{self.port})")
+        log.debug(f"Child URL: {app.url} (host:{app.host}, port:{app.port})")
+
         if not name: name = app.__class__.__name__
         parent = self
         child = app
