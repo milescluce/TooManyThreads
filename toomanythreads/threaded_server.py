@@ -124,12 +124,15 @@ class ThreadedServer(FastAPI):
         child = app
         child_name = name
 
-        if (parent_sessions := getattr(parent, "sessions", None)) and (child_sessions := getattr(child, "sessions", None)):
-            log.debug(f"{self}: Linking {parent_sessions} to {child}")
-            setattr(child, "sessions", parent_sessions)
-        if (parent_users := getattr(parent, "users", None)) and (child_users := getattr(child, "users", None)):
-            log.debug(f"{self}: Linking {parent_users} to {child}")
-            setattr(child, "users", parent_users)
+        # if parent_sessions := getattr(parent, "sessions", None):
+        #     log.debug(f"{self}: Linking {parent_sessions} to {child}")
+        #     setattr(child, "sessions", parent_sessions)
+        # if parent_users := getattr(parent, "users", None):
+        #     log.debug(f"{self}: Linking {parent_users} to {child}")
+        #     setattr(child, "users", parent_users)
+        if parent_session_manager := getattr(parent, "session_manager", None):
+            log.debug(f"{self}: Linking {parent_session_manager} to {child}")
+            setattr(child, "users", parent_session_manager)
 
         parent.app_metadata.is_parent_of.append(child)
         if not getattr(child, "app_metadata", None):
