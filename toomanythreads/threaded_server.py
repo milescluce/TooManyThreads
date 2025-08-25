@@ -79,7 +79,6 @@ class ThreadedServer(FastAPI):
         self.host = host
         if port is None: port = PortManager.random_port()
         self.port = port
-        log.error(self.port)
         PortManager.kill(self.port, force=True)
         super().__init__(debug=self.verbose)
         self.app_metadata = AppMetadata(
@@ -132,7 +131,7 @@ class ThreadedServer(FastAPI):
         #     setattr(child, "users", parent_users)
         if parent_session_manager := getattr(parent, "session_manager", None):
             log.debug(f"{self}: Linking {parent_session_manager} to {child}")
-            setattr(child, "users", parent_session_manager)
+            setattr(child, "session_manager", parent_session_manager)
 
         parent.app_metadata.is_parent_of.append(child)
         if not getattr(child, "app_metadata", None):
